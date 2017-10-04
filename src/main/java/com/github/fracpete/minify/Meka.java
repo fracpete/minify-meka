@@ -28,8 +28,17 @@ import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
 import org.apache.commons.io.FileUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,21 +76,29 @@ public class Meka {
   /** whether to test the build environment. */
   protected boolean m_Test;
 
+  /** the pom.xml DOM. */
+  protected Document m_Document;
+
+  /** the mindeps classpath. */
+  protected String m_MinDepsClassPath;
+
   /**
    * Initializes the minifier.
    */
   public Meka() {
     super();
 
-    m_JavaHome       = null;
-    m_ClassesFile    = null;
-    m_AdditionalFile = null;
-    m_Input          = null;
-    m_InputAbs       = null;
-    m_Packages       = new ArrayList<>();
-    m_Output         = null;
-    m_OutputAbs      = null;
-    m_Test           = false;
+    m_JavaHome         = null;
+    m_ClassesFile      = null;
+    m_AdditionalFile   = null;
+    m_Input            = null;
+    m_InputAbs         = null;
+    m_Packages         = new ArrayList<>();
+    m_Output           = null;
+    m_OutputAbs        = null;
+    m_Test             = false;
+    m_Document         = null;
+    m_MinDepsClassPath = null;
   }
 
   /**
@@ -356,6 +373,68 @@ public class Meka {
   }
 
   /**
+   * Reads the pom.xml.
+   *
+   * @return		null if successful, otherwise error message
+   */
+  protected String readPOM() {
+    File			pom;
+    String			input;
+    DocumentBuilderFactory 	factory;
+    DocumentBuilder 		builder;
+
+    pom = new File(m_InputAbs + File.separator + "pom.xml");
+    try {
+      input = new String(Files.readAllBytes(pom.toPath()));
+      factory = DocumentBuilderFactory.newInstance();
+      factory.setValidating(false);
+      factory.setNamespaceAware(true);
+      factory.setXIncludeAware(false);
+      factory.setExpandEntityReferences(false);
+      factory.setIgnoringComments(false);
+      factory.setIgnoringElementContentWhitespace(false);
+      builder = factory.newDocumentBuilder();
+      m_Document = builder.parse(new ByteArrayInputStream(input.getBytes()));
+    }
+    catch (Exception e) {
+      m_Document = null;
+      return "Failed to read/parse: " + pom + "\n" + e;
+    }
+
+    return null;
+
+  }
+
+  /**
+   * Analyzes the pom.xml to generate a classpath for MinDeps.
+   *
+   * @return		null if successful, otherwise error message
+   */
+  protected String assembleMinDepsClassPath() {
+    StringBuilder		cp;
+    javax.xml.xpath.XPath 	xpath;
+    NodeList 			list;
+    int				i;
+    Node			node;
+
+    try {
+      cp    = new StringBuilder();
+      xpath = XPathFactory.newInstance().newXPath();
+      list  = (NodeList) xpath.evaluate("//dependency", m_Document, XPathConstants.NODESET);
+      for (i = 0; i < list.getLength(); i++) {
+        node = list.item(i);
+        // TODO
+        System.out.println(node.getNodeName());
+      }
+    }
+    catch (Exception e) {
+      return "Failed to determine 'dependency' tags to build classpath!\n" + e;
+    }
+
+    return null;
+  }
+
+  /**
    * Determines the classes to keep.
    *
    * @param classes	to fill in the classes
@@ -565,6 +644,13 @@ public class Meka {
     }
 
     if (result == null)
+      result = readPOM();
+
+    if (result == null)
+      result = assembleMinDepsClassPath();
+
+    /*
+    if (result == null)
       result = minify();
 
     if (result == null) {
@@ -574,6 +660,7 @@ public class Meka {
 	  result = "Failed to build minified build environment: " + result;
       }
     }
+    */
 
     return result;
   }
