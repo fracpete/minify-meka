@@ -464,6 +464,8 @@ public class Meka {
 	  version = clist.item(n).getTextContent();
 	  break;
 	}
+	if ((group == null) || (artifact == null) || (version == null))
+	  continue;
 	// assemble part
 	part = System.getProperty("user.home")
 	  + File.separator + ".m2"
@@ -486,6 +488,8 @@ public class Meka {
     files  = target.listFiles((File dir, String name) -> {
       return (name.endsWith("-SNAPSHOT.jar"));
     });
+    if (files == null)
+      return "No jars found in directory: " + target;
     if (files.length == 0)
       return "Meka jar not found in directory: " + target;
     parts.add(0, files[0].getAbsolutePath());
