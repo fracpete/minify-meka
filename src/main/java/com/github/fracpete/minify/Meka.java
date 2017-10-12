@@ -348,6 +348,7 @@ public class Meka {
       "mvn",
       "clean",
       "compile",
+      "package",
       "-DskipTests=True",
     };
     builder = new ProcessBuilder();
@@ -388,7 +389,7 @@ public class Meka {
       input = new String(Files.readAllBytes(pom.toPath()));
       factory = DocumentBuilderFactory.newInstance();
       factory.setValidating(false);
-      factory.setNamespaceAware(true);
+      factory.setNamespaceAware(false);
       factory.setXIncludeAware(false);
       factory.setExpandEntityReferences(false);
       factory.setIgnoringComments(false);
@@ -412,24 +413,93 @@ public class Meka {
    */
   protected String assembleMinDepsClassPath() {
     StringBuilder		cp;
+    List<String>		parts;
     javax.xml.xpath.XPath 	xpath;
     NodeList 			list;
+    NodeList 			clist;
     int				i;
+    int				n;
     Node			node;
+    String			group;
+    String			artifact;
+    String			version;
+    String			scope;
+    String			part;
+    File			target;
+    File[]			files;
 
+    parts = new ArrayList<>();
     try {
-      cp    = new StringBuilder();
       xpath = XPathFactory.newInstance().newXPath();
       list  = (NodeList) xpath.evaluate("//dependency", m_Document, XPathConstants.NODESET);
       for (i = 0; i < list.getLength(); i++) {
         node = list.item(i);
-        // TODO
-        System.out.println(node.getNodeName());
+        // scope
+        scope = null;
+        clist = (NodeList) xpath.evaluate("./scope", node, XPathConstants.NODESET);
+      	for (n = 0; n < clist.getLength(); n++) {
+	  scope = clist.item(n).getTextContent();
+	  break;
+	}
+	if ((scope != null) && scope.equals("test"))
+	  continue;
+        // group
+        group = null;
+        clist = (NodeList) xpath.evaluate("./groupId", node, XPathConstants.NODESET);
+      	for (n = 0; n < clist.getLength(); n++) {
+	  group = clist.item(n).getTextContent();
+	  break;
+	}
+        // artifact
+        artifact = null;
+        clist = (NodeList) xpath.evaluate("./artifactId", node, XPathConstants.NODESET);
+      	for (n = 0; n < clist.getLength(); n++) {
+	  artifact = clist.item(n).getTextContent();
+	  break;
+	}
+        // version
+        version = null;
+        clist = (NodeList) xpath.evaluate("./version", node, XPathConstants.NODESET);
+      	for (n = 0; n < clist.getLength(); n++) {
+	  version = clist.item(n).getTextContent();
+	  break;
+	}
+	// assemble part
+	part = System.getProperty("user.home")
+	  + File.separator + ".m2"
+	  + File.separator + "repository"
+	  + File.separator + group.replace(".", File.separator)
+	  + File.separator + artifact
+	  + File.separator + version
+	  + File.separator + artifact + "-" + version + ".jar";
+      	if (!new File(part).exists())
+      	  throw new IllegalStateException("File not found: " + part);
+      	parts.add(part);
       }
     }
     catch (Exception e) {
       return "Failed to determine 'dependency' tags to build classpath!\n" + e;
     }
+
+    // meka jar
+    target = new File(m_InputAbs + File.separator + "target");
+    files  = target.listFiles((File dir, String name) -> {
+      return (name.endsWith("-SNAPSHOT.jar"));
+    });
+    if (files.length == 0)
+      return "Meka jar not found in directory: " + target;
+    parts.add(0, files[0].getAbsolutePath());
+
+    // assemble the classpath
+    cp = new StringBuilder();
+    for (i = 0; i < parts.size(); i++) {
+      if (i > 0)
+        cp.append(File.pathSeparator);
+      cp.append(parts.get(i));
+    }
+
+    System.err.println("Classpath:\n" + cp);
+    m_MinDepsClassPath = cp.toString();
 
     return null;
   }
@@ -448,9 +518,7 @@ public class Meka {
     min = new MinDeps();
     min.setJavaHome(getJavaHome());
     min.setPackages(new ArrayList<>(m_Packages));
-    // TODO load pom.xml and analyze dependencies, then use .m2/repository 
-    // to build class path
-    min.setClassPath("");
+    min.setClassPath(m_MinDepsClassPath);
     min.setClassesFile(m_ClassesFile);
     min.setAdditionalFile(m_AdditionalFile);
     msg = min.execute();
@@ -614,6 +682,7 @@ public class Meka {
     if (msg != null)
       return msg;
 
+    /*
     // prepare the output directory
     msg = prepareOutputDir();
     if (msg != null)
@@ -623,6 +692,7 @@ public class Meka {
     msg = copy(classes);
     if (msg != null)
       return msg;
+      */
 
     return null;
   }
@@ -649,7 +719,6 @@ public class Meka {
     if (result == null)
       result = assembleMinDepsClassPath();
 
-    /*
     if (result == null)
       result = minify();
 
@@ -660,7 +729,6 @@ public class Meka {
 	  result = "Failed to build minified build environment: " + result;
       }
     }
-    */
 
     return result;
   }
