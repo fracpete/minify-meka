@@ -49,6 +49,8 @@ import java.util.List;
  */
 public class Meka {
 
+  public final static String EXEC_SKIP = "-Dexec.skip=True";
+
   /** the java home directory to use. */
   protected File m_JavaHome;
 
@@ -350,6 +352,7 @@ public class Meka {
       "compile",
       "package",
       "-DskipTests=True",
+      EXEC_SKIP,
     };
     builder = new ProcessBuilder();
     builder.command(cmd);
@@ -542,7 +545,8 @@ public class Meka {
   protected String prepareOutputDir() {
     File[]	files;
     String	msg;
-    File	libDir;
+    File	dir;
+    File	outDir;
 
     files = m_Output.listFiles();
     if (files == null) {
@@ -572,11 +576,35 @@ public class Meka {
       }
     }
 
+    // src/main/java
+    dir = new File(m_OutputAbs + File.separator + "src" + File.separator + "main" + File.separator + "java");
+    if (!dir.mkdirs())
+      return "Failed to create directory: " + dir;
+
+    // src/main/resources
+    dir = new File(m_OutputAbs + File.separator + "src" + File.separator + "main" + File.separator + "resources");
+    if (!dir.mkdirs())
+      return "Failed to create directory: " + dir;
+
+    // src/main/assembly
+    msg = copyDirectory(new File(m_InputAbs + File.separator + "src" + File.separator + "main" + File.separator + "assembly"));
+    if (msg != null)
+      return msg;
+
+    // src/main/latex
+    msg = copyDirectory(new File(m_InputAbs + File.separator + "src" + File.separator + "main" + File.separator + "latex"));
+    if (msg != null)
+      return msg;
+
+    // src/main/scripts
+    msg = copyDirectory(new File(m_InputAbs + File.separator + "src" + File.separator + "main" + File.separator + "scripts"));
+    if (msg != null)
+      return msg;
+
     // pom.xml
     msg = copyFile(new File(m_InputAbs + File.separator + "pom.xml"));
     if (msg != null)
       return msg;
-
 
     return null;
   }
@@ -602,7 +630,34 @@ public class Meka {
       }
     }
     else {
-      System.err.println("Missing: " + inputFile);
+      System.err.println("Missing file: " + inputFile);
+    }
+
+    return null;
+  }
+
+  /**
+   * Copies a directory to the output dir.
+   *
+   * @param inputDir	the directory to copy
+   * @return		null if successful, otherwise error message
+   */
+  protected String copyDirectory(File inputDir) {
+    File 	outputDir;
+    String	subPath;
+
+    if (inputDir.exists()) {
+      subPath   = inputDir.getAbsolutePath().substring(m_InputAbs.length());
+      outputDir = new File(m_OutputAbs + File.separator + subPath);
+      try {
+	FileUtils.copyDirectory(inputDir, outputDir);
+      }
+      catch (Exception e) {
+	return "Failed to copy directory: " + inputDir + " -> " + outputDir + "\n" + e;
+      }
+    }
+    else {
+      System.err.println("Missing directory: " + inputDir);
     }
 
     return null;
@@ -650,13 +705,13 @@ public class Meka {
 
     // other resources
     System.err.println("Copying resources...");
-    // TODO change to "main/resources"
     for (File inputDir : inputDirs) {
-      files = inputDir.listFiles((File dir, String name) -> {
+      inDir = new File(inputDir.getAbsolutePath().replaceAll("main.java", "main" + File.separator + "resources"));
+      files = inDir.listFiles((File dir, String name) -> {
 	  return !name.equals(".") && !name.equals("..") && !name.endsWith(".java");
       });
       if (files != null) {
-        System.err.println("- " + inputDir);
+        System.err.println("- " + inDir);
 	for (File file: files) {
 	  if (file.isDirectory())
 	    continue;
@@ -686,7 +741,6 @@ public class Meka {
     if (msg != null)
       return msg;
 
-    /*
     // prepare the output directory
     msg = prepareOutputDir();
     if (msg != null)
@@ -696,7 +750,6 @@ public class Meka {
     msg = copy(classes);
     if (msg != null)
       return msg;
-      */
 
     return null;
   }
@@ -733,6 +786,9 @@ public class Meka {
 	  result = "Failed to build minified build environment: " + result;
       }
     }
+
+    if (result == null)
+      System.err.println("Note: Either delete the maven-exec-plugin build tag or use '" + EXEC_SKIP + "'");
 
     return result;
   }
