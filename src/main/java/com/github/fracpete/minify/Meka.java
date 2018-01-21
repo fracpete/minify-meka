@@ -15,7 +15,7 @@
 
 /*
  * Meka.java
- * Copyright (C) 2017 University of Waikato, Hamilton, NZ
+ * Copyright (C) 2017-2018 University of Waikato, Hamilton, NZ
  */
 
 package com.github.fracpete.minify;
@@ -27,7 +27,8 @@ import net.sourceforge.argparse4j.impl.Arguments;
 import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.ArgumentParserException;
 import net.sourceforge.argparse4j.inf.Namespace;
-import org.apache.commons.io.FileUtils;
+import nz.ac.waikato.cms.core.FileUtils;
+import nz.ac.waikato.cms.core.PropsUtils;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -40,7 +41,10 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 
 /**
  * Minifies a Meka build environment using a specified minimum set of classes.
@@ -562,7 +566,7 @@ public class Meka {
 	    continue;
 	  if (file.isDirectory()) {
 	    try {
-	      FileUtils.deleteDirectory(file);
+	      FileUtils.delete(file);
 	    }
 	    catch (Exception e) {
 	      return "Failed to delete directory: " + file + "\n" + e;
@@ -623,7 +627,8 @@ public class Meka {
       subPath = inputFile.getAbsolutePath().substring(m_InputAbs.length());
       outputFile = new File(m_OutputAbs + File.separator + subPath);
       try {
-	FileUtils.copyFile(inputFile, outputFile);
+        outputFile.getParentFile().mkdirs();
+	FileUtils.copyOrMove(inputFile, outputFile, false, false);
       }
       catch (Exception e) {
 	return "Failed to copy file: " + inputFile + " -> " + outputFile + "\n" + e;
@@ -650,7 +655,8 @@ public class Meka {
       subPath   = inputDir.getAbsolutePath().substring(m_InputAbs.length());
       outputDir = new File(m_OutputAbs + File.separator + subPath);
       try {
-	FileUtils.copyDirectory(inputDir, outputDir);
+        outputDir.mkdirs();
+	FileUtils.copyOrMove(inputDir, outputDir, false, false);
       }
       catch (Exception e) {
 	return "Failed to copy directory: " + inputDir + " -> " + outputDir + "\n" + e;
@@ -726,6 +732,75 @@ public class Meka {
   }
 
   /**
+   * Updates some props files according to the final class list.
+   *
+   * @param classes	the final classes
+   * @return		null if successful, otherwise error message
+   */
+  protected String updateProps(List<String> classes) {
+    String		result;
+    String		propsName;
+    File		file;
+    String		baseDir;
+    Properties props;
+    List<String>	delete;
+    Set<String> cache;
+
+    result = null;
+
+    cache   = new HashSet<>(classes);
+    delete  = new ArrayList<>();
+    baseDir = m_OutputAbs + File.separator + "src" + File.separator + "main" + File.separator + "java";
+
+    // GenericPropertiesCreator.props
+    propsName = "meka|gui|goe|MekaPropertiesCreator.props";
+    file = new File(baseDir + File.separator + propsName.replace("|", File.separator));
+    delete.clear();
+    if (file.exists()) {
+      props = new Properties();
+      if (!PropsUtils.load(props, file.getAbsolutePath()))
+        result = "Failed to load props: " + file;
+      if (result == null) {
+	for (String key : props.stringPropertyNames()) {
+	  if (!cache.contains(key))
+	    delete.add(key);
+	}
+	if (delete.size() > 0) {
+	  for (String key : delete)
+	    props.remove(key);
+	  if (!PropsUtils.save(props, file.getAbsolutePath()))
+	    result = "Failed to update props: " + file;
+	}
+      }
+    }
+
+    // GUIEditors.props
+    propsName = "meka|gui|goe|MekaEditors.props";
+    file = new File(baseDir + File.separator + propsName.replace("|", File.separator));
+    delete.clear();
+    if (file.exists()) {
+      props = new Properties();
+      if (!PropsUtils.load(props, file.getAbsolutePath()))
+        result = "Failed to load props: " + file;
+      if (result == null) {
+	for (String key : props.stringPropertyNames()) {
+	  key = key.replace("[]", "");
+	  if (!cache.contains(key))
+	    delete.add(key);
+	}
+	if (delete.size() > 0) {
+	  for (String key : delete)
+	    props.remove(key);
+	  if (!PropsUtils.save(props, file.getAbsolutePath()))
+	    result = "Failed to update props: " + file;
+	}
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Minifies the build environment.
    *
    * @return		null if successful, otherwise error message
@@ -748,6 +823,11 @@ public class Meka {
 
     // copy the classes/resources across
     msg = copy(classes);
+    if (msg != null)
+      return msg;
+
+    // update props files
+    msg = updateProps(classes);
     if (msg != null)
       return msg;
 
