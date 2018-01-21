@@ -60,7 +60,7 @@ Use the following dependency in your `pom.xml`:
     <dependency>
       <groupId>com.github.fracpete</groupId>
       <artifactId>minify-meka</artifactId>
-      <version>0.0.2</version>
+      <version>0.0.3</version>
     </dependency>
 ```
 
@@ -69,5 +69,6 @@ Use the following dependency in your `pom.xml`:
 The `bin` directory of the zip file contains a batch file and a bash script
 for making execution easier.
 
+* [0.0.3](https://github.com/fracpete/minify-meka/releases/download/minify-meka-0.0.3/minify-meka-0.0.3-bin.zip)
 * [0.0.2](https://github.com/fracpete/minify-meka/releases/download/minify-meka-0.0.2/minify-meka-0.0.2-bin.zip)
 * [0.0.1](https://github.com/fracpete/minify-meka/releases/download/minify-meka-0.0.1/minify-meka-0.0.1-bin.zip)
